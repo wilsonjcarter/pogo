@@ -1,0 +1,18 @@
+#define GO_VIRT
+#include "top/martini_v3.0.0.itp"
+#include "top/martini_v3.0.0_solvents_v1.itp"
+#include "top/martini_v3.0.0_ions_v1.itp"
+
+#include "molecule_0.itp"
+#ifdef POSRES
+#include "posre_BB.itp"
+#endif
+
+[ system ]
+Title of the system in water
+
+[ molecules ]
+molecule_0    1
+W           4182
+NA               55
+CL               63
