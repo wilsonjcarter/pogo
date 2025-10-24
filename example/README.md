@@ -45,7 +45,7 @@ Download the `/src` directory. From `/example` directory you can run:
 python ../src/generate.py --init ./initial/ --mdp ./mdp/ --top ./topology/ --nreplicas 2
 ````
 
-This will generate two directories and run simulations in each.
+This will generate two directories and run simulations in each (note that if `gmx_mpi` is not installed, only one replicate should be used).
 
 Next, run:
 

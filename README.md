@@ -8,7 +8,7 @@
   <img src="assets/pogologo.svg" alt="OptiGoMartini Logo" width="300"/>
 </p>
 
-**P**erturbation-based **o**ptimization for **Gō**Martini (PoGō for short) is a toolkit for optimizing GōMartini protein models using perturbation theory + particle swarm optimization (PSO) to reproduce more accurate structural ensembles.  
+**P**erturbation-based **o**ptimization for **Gō**Martini (PoGō for short) is a toolkit for optimizing GōMartini protein models using perturbation theory and particle swarm optimization (PSO) to reproduce more accurate structural ensembles.  
 
 It implements the method described in:  
 
@@ -66,13 +66,13 @@ an example for T4 lysozyme with all relevant inputs is provided in `example/`.
 <p>
   <img align="right" src="assets/pogo_perf.png" width="270" alt="OptiGoMartini Performance"/>
 
-  Using a **M4 MacBook Air** (GROMACS 2025) with our recommended setup of 1 μs CG-simulation per cycle (_i.e._ 10 × (150 ns – 50 ns)), we achieve roughly **10**, **9**, and **7** optimization cycles per day for **T4 lysozyme (T4L)**, **ribose binding protein (RBP)**, and **maltose binding protein (MBP)**, respectively.  
+  Using an **M4 MacBook Air** (GROMACS 2025) with our recommended setup of 1 μs CG-simulation per cycle (_i.e._ 10 × (150 ns – 50 ns)), we achieve roughly **10**, **9**, and **7** optimization cycles per day for **T4 lysozyme (T4L)**, **ribose binding protein (RBP)**, and **maltose binding protein (MBP)**, respectively.  
 
   Given a typical convergence time of around 20 cycles, this suggests that **a few days** are sufficient to yield an optimized Gō network using **only a laptop**.
 </p>
 
 ## Citation
-If you are using our code or model, please cite the following paper:
+If you are using our code please cite the following paper:
 ```bibtex
 @article{pogo2025,
   title={Improving conformational ensembles of folded proteins in GōMartini},
