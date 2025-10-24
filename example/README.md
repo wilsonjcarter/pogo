@@ -42,7 +42,7 @@ Download the `/example` directory. Inside, you will find:
 Download the `/src` directory. From `/example` directory you can run:
 
 ```bash
-python ../src/generate.py --init ./initial/ --mdp ./mdps/ --top ./topology/ --nreplicas 2
+python ../src/generate.py --init ./initial/ --mdp ./mdp/ --top ./topology/ --nreplicas 2
 ````
 
 This will generate two directories and run simulations in each.
@@ -63,7 +63,7 @@ This cycle can be iterated straightforwardly:
 ```bash
 for i in {1..20}; do
   echo "=== CYCLE $i ==="
-  python ../src/generate.py --init ./initial/ --mdp ./mdps/ --top ./topology/ --nreplicas 2
+  python ../src/generate.py --init ./initial/ --mdp ./mdp/ --top ./topology/ --nreplicas 2
   python ../src/optimize.py --ref-pdb ./reference/reference.pdb --ref-traj ./reference/reference.xtc --ref-ndx ./reference/reference.ndx --trj-groups "10 1" --dimensions 3 --nreplicas 2
 done
 ```
