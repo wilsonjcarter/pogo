@@ -137,6 +137,7 @@ def mdrun_multidir(
 
 def mdrun_single(sim_dir: Path, launcher: str, mdrun_cmd: str, mdargs: str, stage: str) -> None:
     """Run a single GROMACS mdrun job in one directory."""
+    mdargs += "-ntmpi 1"
     if launcher.strip():
         cmd = f"{launcher} {mdrun_cmd} -deffnm {sim_dir / stage} {mdargs}".strip()
     else:

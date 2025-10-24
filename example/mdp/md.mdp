@@ -8,7 +8,7 @@
 
 integrator               = md
 dt                       = 0.02
-nsteps                   = 500000
+nsteps                   = 15000000
 nstcomm                  = 100
 comm-grps		             =
 nstxout                  = 0
