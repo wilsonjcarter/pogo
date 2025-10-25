@@ -347,13 +347,13 @@ def main() -> None:
 
     work_dir = Path(args.work_dir).resolve()
     top_dir  = Path(args.top).resolve()
+
     ff_dir        = (work_dir / args.out_ff_param).resolve()
-    
     cg_traj_dir   = (work_dir / args.out_cg_traj).resolve()
     fig_fe_dir    = (work_dir / args.out_fig_fe).resolve()
     fig_shift_dir = (work_dir / args.out_fig_shift).resolve()
     opt_graph_dir = (work_dir / args.out_opt_graphs).resolve()
-    
+
     for d in (cg_traj_dir, fig_fe_dir, fig_shift_dir, opt_graph_dir, ff_dir):
         d.mkdir(parents=True, exist_ok=True)
 
@@ -426,7 +426,7 @@ def main() -> None:
     print("FE plots saved.")
 
     # KDE densities
-    CG = np.vstack([pc_proj_cg[:, i] for i in range(dimensions)]) 
+    CG = np.vstack([pc_proj_cg[:, i] for i in range(dimensions)])
     AA = np.vstack([pc_proj_aa_ref[:, i] for i in range(dimensions)])
 
     kernel_CG = stats.gaussian_kde(CG)
@@ -445,7 +445,7 @@ def main() -> None:
     if not go_params_template.exists():
         print(f"[error] cannot find template GO params: {go_params_template}")
         sys.exit(2)
-        
+
     go_bonds = read_go_bonds(go_params_template)
 
     search_space: List[Tuple[float, float]] = []
@@ -457,7 +457,7 @@ def main() -> None:
     traj_cg = get_traj(u_cg, bb_cg)
     traj_aa = get_traj(u_aa_ref, bb_aa_ref)
 
-    # early exit if severely under-sampled; will cause errors downstream 
+    # early exit if severely under-sampled; will cause errors downstream
     D = go_bonds.shape[0]              # number of GO terms
     N = traj_cg.shape[0]               # CG samples
     MIN_RATIO = 7
@@ -469,7 +469,7 @@ def main() -> None:
     go_cg  = get_go_pot(go_bonds, traj_cg)
     go_aa  = get_go_pot(go_bonds, traj_aa)
     go_all = np.hstack((go_cg, go_aa))
-    
+
     aver_cg = go_cg.mean(axis=1)
     covar   = get_covar(go_cg, go_bonds.shape[0], aver_cg, traj_cg.shape[0])
     eigval, eigvec = np.linalg.eig(covar)

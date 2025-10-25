@@ -14,20 +14,20 @@ python generate.py
 --trj-total-ps   Target ensemble size  (default: 1000000). Will calculate per replica length requirement.
 ```
 
-Generation will try to read `MDRUN`, `GROMPP`, `MDARGS` and `LAUNCHER` from enviornment variables and assign standard defaults (i.e., `gmx`) is none are found. `--trj-total-ps` allows you to select the total size of the generated ensemble in ps and will automatically calculate how long each replica simulation should be assuming a `--trj-equil-ps=50000`ps discard equilibration.
+`generate.py` will attempt to read `MDRUN`, `GROMPP`, `MDARGS`, and `LAUNCHER` from the environment and assign standard defaults (i.e., `gmx`) if none are found. The `--trj-total-ps` flag specifies the total size of the generated ensemble in picoseconds and automatically determines how long each replica simulation should run, assuming a `--trj-equil-ps=50000` ps discard for equilibration.
 
 2. **`optimize.py`** — analyzes generated ensemble and finds an optimal perturbation to the Gō-potential to match the target reference.  
 
 ```scss
 python optimize.py
---workdir         Root directory (default: .)
---ref-pdb         Reference PDB (default: ./reference/reference.pdb)
---ref-traj        Reference trajectory (default: ./reference/reference.xtc)
---ref-ndx         Index file (default: ./reference/reference.ndx)
---dimensions      PCA dimensionality (default: 3)
---nreplicas       Number of replicas (default: 10)
---optstep         Optimization step (default: -1)
---trj-groups      trjconv groups (default: "10 1")
+--workdir        Root directory (default: .)
+--top            Topology directory (default: ./topology)
+--ref-pdb        Reference PDB (default: ./reference/reference.pdb)
+--ref-traj       Reference trajectory (default: ./reference/reference.xtc)
+--ref-ndx        Index file (default: ./reference/reference.ndx)
+--dimensions     PCA dimensionality (default: 3)
+--nreplicas      Number of replicas (default: 10)
+--trj-groups     trjconv groups (default: "10 1")
 ```
 
 ---
