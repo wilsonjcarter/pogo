@@ -39,9 +39,9 @@ tau_p                    = 8.0 ; 12.0  ;parrinello-rahman is more stable with la
 compressibility          = 3e-4 ;  3e-4
 ref_p                    = 1.0  ; 1.0
 
-gen_vel                  = no
+gen_vel                  = yes
 gen_temp                 = 300
-gen_seed                 = 473529
+gen_seed                 = -1
 
 constraints              = none 
 constraint_algorithm     = Lincs
