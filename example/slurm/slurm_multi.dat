@@ -1,0 +1,125 @@
+#!/bin/bash
+#SBATCH --job-name=gen_opt
+#SBATCH -N 10
+#SBATCH --ntasks-per-node=1
+#SBATCH --gres=gpu:1
+#SBATCH -p p08
+#SBATCH -t 1:00:00
+#SBATCH --signal=TERM@120
+#SBATCH -o slurm.%j.out
+#SBATCH -e slurm.%j.err
+
+trap "" TERM # let children checkpoint on preemption
+
+
+
+source /etc/profile.d/modules.sh || true
+module load owl/intel-mpi-default || true
+
+export shell="${SHELL:-/bin/bash}"
+export GMXLDLIB="${GMXLDLIB-}"
+
+source /usr/local/gromacs/GMXRC2025 || true
+source /home/cwilson/anaconda3/bin/activate /home/cwilson/.local/share/mamba/envs/optimartini2
+
+set -euo pipefail
+
+func.getAccel() {
+    local CPUFLAGS=$(grep flags /proc/cpuinfo | head -1)
+    local VENDORID=$(grep vendor_id /proc/cpuinfo | head -1)
+    local ACCEL=""
+    if     [[ $VENDORID == *"AuthenticAMD"* ]]; then
+        ACCEL="_AVX2_128"
+    elif   [[ $CPUFLAGS == *"avx2"* ]]; then
+        ACCEL="_AVX2_256"
+    elif   [[ $CPUFLAGS == *"avx"* ]]; then
+        ACCEL="_AVX_256"
+    elif   [[ $CPUFLAGS == *"sse4_1"* ]]; then
+        ACCEL="_SSE4_1"
+    elif   [[ $CPUFLAGS == *"sse2"* ]]; then
+        ACCEL="_SSE2"
+    fi
+    echo "$ACCEL"
+}
+
+SUF=$(func.getAccel)
+export MDRUN="$(which gmx_threads$SUF) mdrun"
+export GROMPP="$(which gmx_threads$SUF) grompp"
+
+# ---- job variables ----
+export NODES="${SLURM_NNODES:-${SLURM_JOB_NUM_NODES:-1}}"
+export TMP_BASE="${TMPDIR:-/tmp}"
+export RUN_ID="$(date +'%Y%m%d-%H%M%S').$(tr -dc 'a-zA-Z0-9' </dev/urandom | fold -w 8 | head -n 1)"
+
+# Project paths (edit to match your layout)
+export PROJ_ROOT="/home/cwilson/git/pogo/example"
+export INIT_DIR="${PROJ_ROOT}/initial"
+export MDP_DIR="${PROJ_ROOT}/mdp"
+export TOP_DIR="${PROJ_ROOT}/topology"
+export REF_NDX="${PROJ_ROOT}/reference/reference.ndx"
+export FF_DIR="${PROJ_ROOT}/ff_param"
+export OUT_DIR="${PROJ_ROOT}"
+export NREPLICAS="${NODES}"
+
+
+NUM_CYCLES=5
+for cycle in $(seq 1 "$NUM_CYCLES"); do
+  export CYCLE="$cycle"                      # <-- make it visible to srun shells
+  export RUN_ID="$(date +'%Y%m%d-%H%M%S').$(tr -dc 'a-zA-Z0-9' </dev/urandom | fold -w 8 | head -n 1)"
+  
+  
+  echo "===== CYCLE ${cycle}/${NUM_CYCLES} ====="
+  
+  echo "[Cycle $cycle] Cleaning old temp files..."
+  srun --export=ALL -N "${NODES}" -n "${NODES}" bash -lc '
+    for d in ${TMPDIR:-/tmp}/'"${RUN_ID}"'.*; do
+      [[ -d "$d" ]] || continue
+      find "$d" -type f -name "#*#"  -delete
+      find "$d" -type f -name "core*" -delete
+    done
+  '
+
+  echo "[Cycle $cycle] Launching generate.py on all nodes..."
+  srun --export=ALL -N "${NODES}" -n "${NODES}" --chdir="${TMPDIR:-/tmp}" bash -lc '
+    set -euo pipefail
+    SIM_TMP_DIR="${TMPDIR:-/tmp}/${RUN_ID}.${SLURM_PROCID}"
+    SIM_PERM_DIR="${PROJ_ROOT}/sim_${SLURM_PROCID}"
+    mkdir -p "$SIM_TMP_DIR" "$SIM_PERM_DIR"
+    cd "$SIM_TMP_DIR"
+
+    python "/home/cwilson/git/pogo/src/generate.py" \
+      --init   "'"${INIT_DIR}"'" \
+      --mdp    "'"${MDP_DIR}"'" \
+      --top    "'"${TOP_DIR}"'" \
+      --index  "'"${REF_NDX}"'" \
+      --ff     "'"${FF_DIR}"'" \
+      --nreplicas "1" \
+      --trj-total-ps 100000 \
+      --trj-equil-ps 10000 \
+      > "'"${OUT_DIR}"'/generate_${RUN_ID}_cycle${CYCLE}_rep${SLURM_PROCID}.out"
+
+    XTC_SRC="$(find "$SIM_TMP_DIR" -maxdepth 3 -type f -name "cg_pbc.xtc" | head -n 1 || true)"
+    if [[ -n "${XTC_SRC}" ]]; then
+      cp -f "$XTC_SRC" "$SIM_PERM_DIR/cg_pbc.xtc"
+    fi
+  '
+
+  echo "[Cycle $cycle] Running optimize.py on a single node..."
+  srun --export=ALL -N 1 -n 1 bash -lc '
+    set -euo pipefail
+    python "/home/cwilson/git/pogo/src/optimize.py" \
+      --ref-pdb   "'"${PROJ_ROOT}"'/reference/reference.pdb" \
+      --ref-traj  "'"${PROJ_ROOT}"'/reference/reference.xtc" \
+      --ref-ndx   "'"${PROJ_ROOT}"'/reference/reference.ndx" \
+      --trj-groups "10 1" \
+      --dimensions 3 \
+      --nreplicas "'"${NREPLICAS}"'" \
+      > "'"${OUT_DIR}"'/optimize_${RUN_ID}_cycle${CYCLE}_n${NREPLICAS}.out"
+  '
+  
+  echo "[Cycle $cycle] Completed."
+done
+
+
+echo "===== ALL CYCLES COMPLETE ====="
+
