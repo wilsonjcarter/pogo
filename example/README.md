@@ -82,7 +82,9 @@ for i in {1..20}; do
   python ../src/optimize.py --ref-pdb ./reference/reference.pdb --ref-traj ./reference/reference.xtc --ref-ndx ./reference/reference.ndx --trj-groups "10 1" --dimensions 3 --nreplicas 2
 done
 ```
+
 For use on a HPC system we have provided an example SLURM job script: `./example/slurm/slurm_single.dat`.
+
 ---
 
 ## Multi node
