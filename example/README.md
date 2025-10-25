@@ -83,13 +83,13 @@ for i in {1..20}; do
 done
 ```
 
-For use on a HPC system we have provided an example SLURM job script: `./example/slurm/slurm_single.dat`.
+If you’re running on an HPC system, an example SLURM job script is available at: `./example/slurm/slurm_single.dat`.
 
 ---
 
 ## Multi node
 
-To further improve performance, one can parallelize the workflow. Below is an excerpt from an example SLURM script: `./example/slurm/slurm_multi.dat`:
+To further improve performance, you can parallelize the workflow. Below is an excerpt from an example SLURM script: `./example/slurm/slurm_multi.dat`:
 
 ```bash
 for cycle in $(seq 1 "$NUM_CYCLES"); do
