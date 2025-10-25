@@ -73,21 +73,21 @@ done
 
 ## Single node `-multidir`
 
-To improve aggregate simulation performance on nodes with many CPUs or multiple GPUs, the `-multidir` option can be used. It is sufficient to simply specify `--nreplicas 2` to enable this functionality; each replicate will now run half of the total 11 ns, so 5.5 ns each.
+To improve aggregate simulation performance on nodes with many CPUs or multiple GPUs, the `-multidir` option can be used. It is sufficient to simply specify `--nreplicas 2` to enable this functionality; each replicate will now run half of the total 100 ns.
 
 ```bash
 for i in {1..20}; do
   echo "===== CYCLE ${cycle}/20 ====="
-  python ../src/generate.py --init ./initial/ --mdp ./mdp/ --top ./topology/ --nreplicas 2 --trj-length 11000 --trj-equil-ps 1000
+  python ../src/generate.py --init ./initial/ --mdp ./mdp/ --top ./topology/ --nreplicas 2 --trj-length 100000 --trj-equil-ps 10000
   python ../src/optimize.py --ref-pdb ./reference/reference.pdb --ref-traj ./reference/reference.xtc --ref-ndx ./reference/reference.ndx --trj-groups "10 1" --dimensions 3 --nreplicas 2
 done
 ```
-
+For use on a HPC system we have provided an example SLURM job script: `./example/slurm/slurm_single.dat`.
 ---
 
 ## Multi node
 
-To further improve performance, one can parallelize the workflow. Below is an excerpt from `slurm.dat`:
+To further improve performance, one can parallelize the workflow. Below is an excerpt from an example SLURM script: `./example/slurm/slurm_multi.dat`:
 
 ```bash
 for cycle in $(seq 1 "$NUM_CYCLES"); do
@@ -120,8 +120,8 @@ for cycle in $(seq 1 "$NUM_CYCLES"); do
         --index  "'"${REF_NDX}"'" \
         --ff     "'"${FF_DIR}"'" \
         --nreplicas "1" \
-        --trj-total-ps 150000 \
-        --trj-equil-ps 50000 \
+        --trj-total-ps 100000 \
+        --trj-equil-ps 10000 \
         > "'"${OUT_DIR}"'/generate_${RUN_ID}_cycle${CYCLE}_rep${SLURM_PROCID}.out"
 
         XTC_SRC="$(find "$SIM_TMP_DIR" -maxdepth 3 -type f -name "cg_pbc.xtc" | head -n 1 || true)"
