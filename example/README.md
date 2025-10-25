@@ -44,10 +44,10 @@ Download the `/example` directory. Inside, you will find:
 Download the `/src` directory. From the `/example` directory you can run:
 
 ```bash
-python ../src/generate.py --init ./initial/ --mdp ./mdp/ --top ./topology/ --nreplicas 1 --trj-total-ps 10000 --trj-equil-ps 1000
+python ../src/generate.py --init ./initial/ --mdp ./mdp/ --top ./topology/ --nreplicas 1 --trj-total-ps 100000 --trj-equil-ps 10000
 ```
 
-For illustration, we run a very short 10 ns simulation, discarding 1 ns as equilibration. For a proper optimization cycle, we recommend using an ensemble of 1 microsecond. Note that if `gmx_mpi` is not installed and `-multidir` cannot be used, `--nreplicas 1` should be chosen.
+For illustration, we run a short 100 ns simulation, discarding 10 ns as equilibration. For a proper optimization cycle, we recommend using an ensemble of 1 microsecond. Note that if `gmx_mpi` is not installed and `-multidir` cannot be used, `--nreplicas 1` should be chosen.
 
 After the ensemble is generated, we run:
 
@@ -93,9 +93,9 @@ To further improve performance, one can parallelize the workflow. Below is an ex
 for cycle in $(seq 1 "$NUM_CYCLES"); do
     export CYCLE="$cycle"                      # <-- make it visible to srun shells
     export RUN_ID="$(date +'%Y%m%d-%H%M%S').$(tr -dc 'a-zA-Z0-9' </dev/urandom | fold -w 8 | head -n 1)"
-    
+
     echo "===== CYCLE ${cycle}/${NUM_CYCLES} ====="
-    
+
     echo "[Cycle $cycle] Cleaning old temp files..."
     srun --export=ALL -N "${NODES}" -n "${NODES}" bash -lc '
         for d in ${TMPDIR:-/tmp}/'"${RUN_ID}"'.*; do
@@ -142,7 +142,7 @@ for cycle in $(seq 1 "$NUM_CYCLES"); do
         --nreplicas "'"${NREPLICAS}"'" \
         > "'"${OUT_DIR}"'/optimize_${RUN_ID}_cycle${CYCLE}_n${NREPLICAS}.out"
     '
-    
+
     echo "[Cycle $cycle] Completed."
 done
 ```
