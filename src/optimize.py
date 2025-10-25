@@ -10,7 +10,6 @@ from contextlib import redirect_stdout, redirect_stderr
 import argparse
 
 import numpy as np
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib import ticker
@@ -145,6 +144,7 @@ def optimize_lambda(search_space: List[Tuple[float, float]],
         B_c      = np.ascontiguousarray(B)
         lambd_c  = np.ascontiguousarray(lambd)
         eigval_c = np.ascontiguousarray(eigval)
+
         score = get_score(eigvec_T, B_c, eigval_c, prob_diff_ref, lambd_c, threshold)
         iter_counter["i"] += 1
         if log_path is not None and (iter_counter["i"] % 100 == 0):
@@ -300,9 +300,7 @@ def parse_args() -> argparse.Namespace:
     )
 
     cwd = Path.cwd()
-    p.add_argument("--workdir", default=str(cwd))
-    p.add_argument("--init", default=str(cwd / "initial"))
-    p.add_argument("--mdp", default=str(cwd / "mdp"))
+    p.add_argument("--work_dir", default=str(cwd))
     p.add_argument("--top", default=str(cwd / "topology"))
 
     p.add_argument("--ref-pdb", default="reference/reference.pdb")
@@ -313,7 +311,6 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--nreplicas", type=int, default=int(env.get("NNODS", "10")))
     p.add_argument("--optstep", type=int, default=int(env.get("NOPTSTEP", "-1")))
     p.add_argument("--trj-groups", default="10 1")
-    p.add_argument("--trj-begin-ps", type=int, default=10000)
 
     p.add_argument("--out-cg-traj", default="cg_traj")
     p.add_argument("--out-fig-fe", default=str(Path("figures") / "FE"))
@@ -326,11 +323,11 @@ def parse_args() -> argparse.Namespace:
 # -----------------------------
 # Misc
 # -----------------------------
-def infer_opt_step(ff_param_dir: Path, override_step: int) -> int:
+def infer_opt_step(ff_dir: Path, override_step: int) -> int:
     if override_step is not None and override_step >= 0:
         return int(override_step)
     steps = []
-    for p in ff_param_dir.glob("go_nbparams_*.itp"):
+    for p in ff_dir.glob("go_nbparams_*.itp"):
         try:
             steps.append(int(p.stem.split("_")[-1]))
         except ValueError:
@@ -342,32 +339,34 @@ def infer_opt_step(ff_param_dir: Path, override_step: int) -> int:
 # Main
 # -----------------------------
 def main() -> None:
-    if sys.version_info < (3, 8):
-        print("[error] Python >= 3.8 required")
+    if sys.version_info < (3, 7):
+        print("[error] Python >= 3.7 required")
         sys.exit(1)
 
     args = parse_args()
 
-    workdir = Path(args.workdir).resolve()
+    work_dir = Path(args.work_dir).resolve()
+    top_dir  = Path(args.top).resolve()
 
-    cg_traj_dir   = (workdir / args.out_cg_traj).resolve()
-    fig_fe_dir    = (workdir / args.out_fig_fe).resolve()
-    fig_shift_dir = (workdir / args.out_fig_shift).resolve()
-    opt_graph_dir = (workdir / args.out_opt_graphs).resolve()
-    ff_param_dir  = (workdir / args.out_ff_param).resolve()
-    for d in (cg_traj_dir, fig_fe_dir, fig_shift_dir, opt_graph_dir, ff_param_dir):
+    ff_dir        = (work_dir / args.out_ff_param).resolve()
+    cg_traj_dir   = (work_dir / args.out_cg_traj).resolve()
+    fig_fe_dir    = (work_dir / args.out_fig_fe).resolve()
+    fig_shift_dir = (work_dir / args.out_fig_shift).resolve()
+    opt_graph_dir = (work_dir / args.out_opt_graphs).resolve()
+
+    for d in (cg_traj_dir, fig_fe_dir, fig_shift_dir, opt_graph_dir, ff_dir):
         d.mkdir(parents=True, exist_ok=True)
 
     TRJCAT  = f"gmx trjcat"
     TRJCONV = f"gmx trjconv"
 
     nreplicas = int(args.nreplicas)
-    sim_dirs = [workdir / f"sim_{i}" for i in range(nreplicas)]
+    sim_dirs = [work_dir / f"sim_{i}" for i in range(nreplicas)]
 
     dimensions = int(args.dimensions)
-    ref_pdb   = (workdir / args.ref_pdb).resolve()
-    ref_traj  = (workdir / args.ref_traj).resolve()
-    ref_ndx   = (workdir / args.ref_ndx).resolve()
+    ref_pdb   = (work_dir / args.ref_pdb).resolve()
+    ref_traj  = (work_dir / args.ref_traj).resolve()
+    ref_ndx   = (work_dir / args.ref_ndx).resolve()
 
     if not ref_pdb.exists():
         print(f"[error] missing reference PDB: {ref_pdb}"); sys.exit(2)
@@ -376,14 +375,22 @@ def main() -> None:
     if not ref_ndx.exists():
         print(f"[error] missing index file: {ref_ndx}"); sys.exit(2)
 
-    opt_step = infer_opt_step(ff_param_dir, args.optstep)
+    print(f"WORKDIR:     {work_dir}")
+    print(f"TOP_DIR:     {top_dir}")
+    print(f"FF_DIR:      {ff_dir}")
+    print(f"CG_TRAJ_DIR: {cg_traj_dir}")
+    print(f"FE_DIR:      {fig_fe_dir}")
+    print(f"SHIFT_DIR:   {fig_shift_dir}")
+    print(f"OPT_DIR:     {opt_graph_dir}")
+
+    opt_step = infer_opt_step(ff_dir, args.optstep)
     print(f"************* OPTSTEP: {opt_step} *************")
 
     # Concatenate CG replicas
     print("\nConcatenating trajectories...")
     xtc_list = []
     for i in range(nreplicas):
-        p = workdir / f"sim_{i}" / "cg_pbc.xtc"
+        p = work_dir / f"sim_{i}" / "cg_pbc.xtc"
         if p.exists():
             xtc_list.append(str(p))
         else:
@@ -407,11 +414,11 @@ def main() -> None:
     bb_aa_ref = u_aa_ref.select_atoms("name BB")
 
     # PCA
-    pca_AA = pca.PCA(u_aa_ref, select="name BB", n_components=dimensions).run()
+    pca_AA         = pca.PCA(u_aa_ref, select="name BB", n_components=dimensions).run()
     pc_proj_cg     = pca_AA.transform(bb_cg, n_components=dimensions)
     pc_proj_aa_ref = pca_AA.transform(bb_aa_ref, n_components=dimensions)
 
-    var = np.var(pc_proj_cg[:,0])
+    var = np.var(pc_proj_aa_ref[:,0])
     pc_boundary = int(5 * np.sqrt(var))
 
     # FE plots
@@ -419,11 +426,8 @@ def main() -> None:
     print("FE plots saved.")
 
     # KDE densities
-    #CG = np.vstack([pc_proj_cg[:, 0],     pc_proj_cg[:, 1],     pc_proj_cg[:, 2]])
-    #AA = np.vstack([pc_proj_aa_ref[:, 0], pc_proj_aa_ref[:, 1], pc_proj_aa_ref[:, 2]])
-
-    CG = np.vstack([pc_proj_cg[:, i] for i in range(dimensions)]) #     pc_proj_cg[:, 1],     pc_proj_cg[:, 2]])
-    AA = np.vstack([pc_proj_aa_ref[:, i] for i in range(dimensions)]) #([pc_proj_aa_ref[:, 0], pc_proj_aa_ref[:, 1], pc_proj_aa_ref[:, 2]])
+    CG = np.vstack([pc_proj_cg[:, i] for i in range(dimensions)])
+    AA = np.vstack([pc_proj_aa_ref[:, i] for i in range(dimensions)])
 
     kernel_CG = stats.gaussian_kde(CG)
     kernel_AA = stats.gaussian_kde(AA)
@@ -437,10 +441,11 @@ def main() -> None:
     prob_diff_ref = np.log((probAA + 1e-12) / (probCG + 1e-12))
 
     # GO params + search space
-    go_params_template = (sim_dirs[0] / "top" / "go_nbparams.itp")
+    go_params_template = (top_dir / "top" / "go_nbparams.itp")
     if not go_params_template.exists():
         print(f"[error] cannot find template GO params: {go_params_template}")
         sys.exit(2)
+
     go_bonds = read_go_bonds(go_params_template)
 
     search_space: List[Tuple[float, float]] = []
@@ -452,6 +457,15 @@ def main() -> None:
     traj_cg = get_traj(u_cg, bb_cg)
     traj_aa = get_traj(u_aa_ref, bb_aa_ref)
 
+    # early exit if severely under-sampled; will cause errors downstream
+    D = go_bonds.shape[0]              # number of GO terms
+    N = traj_cg.shape[0]               # CG samples
+    MIN_RATIO = 7
+
+    if N < MIN_RATIO * D:
+        print(f"[abort] Not enough sampling: # of frames={N} < {MIN_RATIO}×(# of Gō-bonds)={MIN_RATIO*D}")
+        sys.exit(80)
+
     go_cg  = get_go_pot(go_bonds, traj_cg)
     go_aa  = get_go_pot(go_bonds, traj_aa)
     go_all = np.hstack((go_cg, go_aa))
@@ -459,6 +473,18 @@ def main() -> None:
     aver_cg = go_cg.mean(axis=1)
     covar   = get_covar(go_cg, go_bonds.shape[0], aver_cg, traj_cg.shape[0])
     eigval, eigvec = np.linalg.eig(covar)
+
+    def _ensure_real64(x, name, tol=1e-10):
+        if np.iscomplexobj(x):
+            if np.max(np.abs(np.imag(x))) <= tol:
+                x = np.real(x)
+            else:
+                print(f"[abort] {name} has significant imaginary parts; likely under-sampled.")
+                sys.exit(81)
+        return np.ascontiguousarray(x, dtype=np.float64)
+
+    eigval = _ensure_real64(eigval, "eigval")
+    eigvec = _ensure_real64(eigvec, "eigvec")
 
     # Build B
     B = np.zeros((go_all.shape[1], go_bonds.shape[0]))
@@ -487,16 +513,18 @@ def main() -> None:
     bb_ids = bb_aa_ref.atoms.ids.astype(int)
     for d in sim_dirs:
         out_nb = d / "top" / "go_nbparams.itp"
-        out_ex = d / "top" / "exclusions_go.itp"
         print(f"writing: {out_nb}")
-        write_go_nbparams(out_nb, go_bonds)
+        try:
+            write_go_nbparams(out_nb, go_bonds)
+        except:
+            print(f"[warn] could not write gobonds to: {out_nb}")
 
-    out_ff = ff_param_dir / f"go_nbparams_{opt_step}.itp"
+    out_ff = ff_dir / f"go_nbparams_{opt_step+1}.itp"
     print(f"writing: {out_ff}")
     write_go_nbparams(out_ff, go_bonds)
 
     try:
-        (workdir / "concatenated.xtc").unlink()
+        (work_dir / "concatenated.xtc").unlink()
     except FileNotFoundError:
         pass
 

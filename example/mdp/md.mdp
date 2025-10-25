@@ -8,9 +8,9 @@
 
 integrator               = md
 dt                       = 0.02
-nsteps                   = 5000000
+nsteps                   = 100000000
 nstcomm                  = 100
-comm-grps		             =
+comm-grps		         =
 nstxout                  = 0
 nstvout                  = 0
 nstfout                  = 0
@@ -47,7 +47,7 @@ ref_p                    = 1.0
 
 gen_vel                  = no
 gen_temp                 = 300
-gen_seed                 = 473529
+gen_seed                 = -1
 
 constraints              = none
 constraint_algorithm     = Lincs

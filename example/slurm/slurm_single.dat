@@ -1,0 +1,129 @@
+#!/bin/bash
+#SBATCH --job-name=gen_opt
+#SBATCH -N 1
+#SBATCH --ntasks-per-node=8
+#SBATCH --gres=gpu:1
+#SBATCH -p p32
+#SBATCH -t 1:00:00
+#SBATCH --signal=TERM@120
+#SBATCH -o slurm.%j.out
+#SBATCH -e slurm.%j.err
+
+trap "" TERM # let children checkpoint on preemption
+
+
+
+source /etc/profile.d/modules.sh || true
+module load owl/intel-mpi-default || true
+
+export shell="${SHELL:-/bin/bash}"
+export GMXLDLIB="${GMXLDLIB-}"
+
+source /usr/local/gromacs/GMXRC2025 || true
+source /home/cwilson/anaconda3/bin/activate /home/cwilson/.local/share/mamba/envs/optimartini2
+
+set -euo pipefail
+
+func.getAccel() {
+    local CPUFLAGS=$(grep flags /proc/cpuinfo | head -1)
+    local VENDORID=$(grep vendor_id /proc/cpuinfo | head -1)
+    local ACCEL=""
+    if     [[ $VENDORID == *"AuthenticAMD"* ]]; then
+        ACCEL="_AVX2_128"
+    elif   [[ $CPUFLAGS == *"avx2"* ]]; then
+        ACCEL="_AVX2_256"
+    elif   [[ $CPUFLAGS == *"avx"* ]]; then
+        ACCEL="_AVX_256"
+    elif   [[ $CPUFLAGS == *"sse4_1"* ]]; then
+        ACCEL="_SSE4_1"
+    elif   [[ $CPUFLAGS == *"sse2"* ]]; then
+        ACCEL="_SSE2"
+    fi
+    echo "$ACCEL"
+}
+
+SUF=$(func.getAccel)
+export MDRUN="$(which gmx_threads$SUF) mdrun"
+export GROMPP="$(which gmx_mpi$SUF) grompp"
+
+# ---- job variables ----
+export NODES="${SLURM_NNODES:-${SLURM_JOB_NUM_NODES:-1}}"
+export TMP_BASE="${TMPDIR:-/tmp}"
+export RUN_ID="$(date +'%Y%m%d-%H%M%S').$(tr -dc 'a-zA-Z0-9' </dev/urandom | fold -w 8 | head -n 1)"
+
+# Project paths (edit to match your layout)
+export PROJ_ROOT="/home/cwilson/git/pogo/example"
+export INIT_DIR="${PROJ_ROOT}/initial"
+export MDP_DIR="${PROJ_ROOT}/mdp"
+export TOP_DIR="${PROJ_ROOT}/topology"
+export REF_NDX="${PROJ_ROOT}/reference/reference.ndx"
+export FF_DIR="${PROJ_ROOT}/ff_param"
+export OUT_DIR="${PROJ_ROOT}"
+
+
+
+export CORES=32
+export NREPLICAS=8
+
+NMPI=$NREPLICAS  # multi-simulation with one MPI rank per replica
+NOMP=$(( CORES/NREPLICAS )) # 8 cores / 4 jobs
+SUF=$( func.getAccel )
+export MDRUN="$(which gmx_mpi$SUF) mdrun -ntomp $NOMP" # set openmp accoring to your partition
+MPIMDRUN="$MPIRUN -n $NMPI --cpu-bind no $MDRUN"
+export GROMPP="$(which gmx_threads$SUF) grompp "
+
+# One workspace reused across cycles
+export RUN_ID="$(date +'%Y%m%d-%H%M%S').$(tr -dc 'a-zA-Z0-9' </dev/urandom | fold -w 8 | head -n 1)"
+SIM_TMP_DIR="${TMPDIR}/${RUN_ID}"
+SIM_PERM_DIR="${PROJ_ROOT}"
+mkdir -p "${SIM_TMP_DIR}"
+
+NUM_CYCLES=5
+for cycle in $(seq 1 "$NUM_CYCLES"); do
+  export CYCLE="$cycle"
+  echo "===== CYCLE ${CYCLE}/${NUM_CYCLES} ====="
+
+  # Clean transient files inside the reused tmp dir
+  find "${SIM_TMP_DIR}" -type f \( -name "#*#" -o -name "core*" \) -delete || true
+
+  echo "[Cycle ${CYCLE}] Launching generate.py..."
+  (
+    cd "${SIM_TMP_DIR}"
+    python "/home/cwilson/git/pogo/src/generate.py" \
+      --init       "${INIT_DIR}" \
+      --mdp        "${MDP_DIR}" \
+      --top        "${TOP_DIR}" \
+      --index      "${REF_NDX}" \
+      --ff         "${FF_DIR}" \
+      --nreplicas  "${NREPLICAS}" \
+      --trj-total-ps 100000 \
+      --trj-equil-ps 10000 \
+      > "${OUT_DIR}/generate_${RUN_ID}_cycle${CYCLE}.out"
+  )
+
+  # Copy back any produced trajectories per replica
+  echo "[Cycle ${CYCLE}] Copying trajectories back..."
+  for run in $(seq 0 "$((NREPLICAS-1))"); do
+    src="$(find "${SIM_TMP_DIR}/sim_${run}/" -maxdepth 3 -type f -name "cg_pbc.xtc" | head -n 1 || true)"
+    if [[ -n "${src}" ]]; then
+      dst="${SIM_PERM_DIR}/sim_${run}"
+      mkdir -p "${dst}"
+      cp -f "${src}" "${dst}/cg_pbc.xtc"
+    fi
+  done
+
+  echo "[Cycle ${CYCLE}] Running optimize.py..."
+  python "/home/cwilson/git/pogo/src/optimize.py" \
+    --ref-pdb     "${PROJ_ROOT}/reference/reference.pdb" \
+    --ref-traj    "${PROJ_ROOT}/reference/reference.xtc" \
+    --ref-ndx     "${PROJ_ROOT}/reference/reference.ndx" \
+    --trj-groups  "10 1" \
+    --dimensions  3 \
+    --nreplicas   "${NREPLICAS}" \
+    > "${OUT_DIR}/optimize_${RUN_ID}_cycle${CYCLE}.out"
+
+  echo "[Cycle ${CYCLE}] Completed."
+done
+
+echo "===== ALL CYCLES COMPLETE ====="
+

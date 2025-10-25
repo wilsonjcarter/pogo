@@ -1,7 +1,7 @@
 title                    = Martini
 define                   = -DPOSRES -DFCONST=1000
-integrator               = md    
-dt                       = 0.005 
+integrator               = sd    
+dt                       = 0.001 
 nsteps                   = 20000
 nstcomm                  = 100
 comm-grps		         = 
@@ -19,7 +19,8 @@ cutoff-scheme            = Verlet
 nstlist                  = 20
 ns_type                  = grid
 pbc                      = xyz
-verlet-buffer-tolerance  = 0.005
+verlet-buffer-tolerance  = -1
+rlist                    = 1.1
 
 coulombtype              = reaction-field 
 rcoulomb                 = 1.1

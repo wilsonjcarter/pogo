@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import glob
 import os
+import re
 import random
 import shutil
 import subprocess
@@ -15,21 +16,20 @@ from typing import Iterable, List, Optional
 # -----------------------------
 # helpers
 # -----------------------------
-def run_cmd(cmd: str, *, input_text: Optional[str] = None, cwd: Optional[Path] = None) -> int:
-    """Run a shell command, stream stdout/stderr, return exit code."""
-    print(f"\n>>> {cmd}")
-    try:
-        res = subprocess.run(
-            cmd,
-            shell=True,
-            input=(input_text.encode() if input_text is not None else None),
-            cwd=str(cwd) if cwd else None,
-            check=False,
-        )
-        return res.returncode
-    except FileNotFoundError as e:
-        print(f"[run_cmd] executable not found: {e}")
-        return 127
+def run_cmd(cmd: str, *, input_text: Optional[str] = None, cwd: Optional[Path] = None, quiet: bool = False) -> int:
+    if not quiet:
+        print(f"\n>>> {cmd}")
+    kwargs = {
+        "shell": True,
+        "input": (input_text.encode() if input_text else None),
+        "cwd": str(cwd) if cwd else None,
+        "check": False,
+    }
+    if quiet:
+        kwargs["stdout"] = subprocess.DEVNULL
+        kwargs["stderr"] = subprocess.DEVNULL
+    res = subprocess.run(cmd, **kwargs)
+    return res.returncode
 
 
 def rm_files(paths: Iterable[Path]) -> None:
@@ -50,7 +50,7 @@ def copy_if_exists(src: Path, dst: Path) -> None:
 # -----------------------------
 # preparation
 # -----------------------------
-def prepare_dirs(sim_dirs: List[Path], init_dir: Path, top_dir: Path) -> None:
+def prepare_dirs(sim_dirs: List[Path], init_dir: Path, top_dir: Path, ff_dir: Path) -> None:
     """Create/clean sim directories and stage required input files."""
     extensions = ("log", "cpt", "tpr", "edr", "xtc", "trr", "gro")
 
@@ -79,7 +79,21 @@ def prepare_dirs(sim_dirs: List[Path], init_dir: Path, top_dir: Path) -> None:
                 shutil.copytree(top_src, top_dst)
             else:
                 print(f"[warn] missing reference directory: {top_src}")
-
+                
+                
+        # Will copy the most recent go_nbparams file from ff_param folder if present
+        itp_files = sorted(ff_dir.glob("go_nbparams_*.itp"), 
+                           key=lambda f: int(re.search(r'\d+', f.stem).group()),
+                           reverse=True)
+        if itp_files:
+            latest_itp = itp_files[0]
+            print(f"[info] Using most recent ITP: {latest_itp.name}")
+        else:
+            latest_itp = None
+            print(f"[warn] No go_nbparams_*.itp found in {ff_dir}")
+    
+        if latest_itp:
+            shutil.copy(latest_itp, top_dst / latest_itp.name)
 
 # -----------------------------
 # gromacs steps
@@ -99,8 +113,9 @@ def grompp(
         ref_opt = f"-r {d / ref_gro}" if ref_gro else ""
         cmd = (
             f"{grompp_cmd} -c {d / input_gro} -f {mdp_dir / mdp_file} "
-            f"-p {d / 'topol.top'} -o {d / output_tpr} {ref_opt} -maxwarn 3"
+            f"-p {d / 'topol.top'} -o {d / output_tpr} {ref_opt} -maxwarn 2"
         )
+        
         code = run_cmd(cmd)
         if code != 0:
             print(f"[error] grompp failed in {d} for stage {stage} (code {code})")
@@ -126,6 +141,7 @@ def mdrun_multidir(
             cmd = f"{launcher} -np {nreplicas} {mdrun_cmd} -multidir {dirs_str} -deffnm {stage} {mdargs}".strip()
         else:
             cmd = f"{mdrun_cmd} -multidir {dirs_str} -deffnm {stage} {mdargs}".strip()
+
         code = run_cmd(cmd)
         if code != 0:
             print(f"[error] mdrun failed for stage {stage} (code {code})")
@@ -137,13 +153,11 @@ def mdrun_multidir(
 
 def mdrun_single(sim_dir: Path, launcher: str, mdrun_cmd: str, mdargs: str, stage: str) -> None:
     """Run a single GROMACS mdrun job in one directory."""
-    mdargs += "-ntmpi 1"
     if launcher.strip():
         cmd = f"{launcher} {mdrun_cmd} -deffnm {sim_dir / stage} {mdargs}".strip()
     else:
         cmd = f"{mdrun_cmd} -deffnm {sim_dir / stage} {mdargs}".strip()
 
-    print(f"[run] {cmd}")
     code = run_cmd(cmd)
     if code != 0:
         print(f"[error] mdrun failed for stage {stage} in {sim_dir} (code {code})")
@@ -187,14 +201,15 @@ def parse_args() -> argparse.Namespace:
     cwd = Path.cwd()
     p.add_argument("--workdir", default=str(cwd), help="Working directory (root for runs).")
     p.add_argument("--init", default=str(cwd / "initial"), help="Directory containing AA frames 'frame<N>.gro'.")
-    p.add_argument("--mdp", default=str(cwd / "mdp"), help="Directory containing mdp files.")
     p.add_argument("--top", default=str(cwd / "topology"), help="Directory containing topology files and top/ tree.")
+    p.add_argument("--mdp", default=str(cwd / "mdp"), help="Directory containing mdp files.")
+    p.add_argument("--ff", default=str(cwd / "ff_param"), help="Directory containing go_nbparams.itp files.")
     p.add_argument("--index", default=str(cwd / "reference/reference.ndx"), help="Directory with reference files (reference.*).")
     p.add_argument("--nreplicas", type=int, default=int(env.get("NREPLICAS", "10")),
                    help="Number of replicas (sim_0..sim_{N-1}).")
 
-    # Trajectory post-processing
-    p.add_argument("--trj-begin-ps", type=int, default=50000, help="Start time (ps) for trjconv -b.")
+    p.add_argument("--trj-total-ps", type=int, default=50000000, help="Generated ensemble size (ps). Will calculate requirement per replica.")
+    p.add_argument("--trj-equil-ps", type=int, default=50000, help="Equilibration discard (ps) per replica i.e., trjconv -b.")
     p.add_argument("--seed", type=int, default=None, help="Random seed for selecting AA frames.")
     return p.parse_args()
 
@@ -203,8 +218,8 @@ def parse_args() -> argparse.Namespace:
 # main pipeline
 # -----------------------------
 def main() -> None:
-    if sys.version_info < (3, 8):
-        print("[error] Python >= 3.8 required")
+    if sys.version_info < (3, 7):
+        print("[error] Python >= 3.7 required")
         sys.exit(1)
 
     args = parse_args()
@@ -217,6 +232,7 @@ def main() -> None:
     top_dir = Path(args.top).resolve()
     init_dir = Path(args.init).resolve()
     mdp_dir = Path(args.mdp).resolve()
+    ff_dir = Path(args.ff).resolve()
     index = Path(args.index).resolve()
 
     # Tool selection
@@ -229,32 +245,34 @@ def main() -> None:
 
     MDRUN = os.getenv("MDRUN", mdrun_default)
     GROMPP = os.getenv("GROMPP", "gmx grompp")
-    MDARGS = os.getenv("MDARGS", "")  # e.g., "-ntomp 1"
+    MDARGS = os.getenv("MDARGS", "-v")  # e.g., "-ntomp 1"
     LAUNCHER = os.getenv("LAUNCHER", launcher_default)
 
     # Build sim directories
     sim_dirs = [work_dir / f"sim_{i}" for i in range(args.nreplicas)]
 
-    print(f"WORKDIR:   {work_dir}")
-    print(f"TOP_DIR:   {top_dir}")
-    print(f"INIT_DIR:  {init_dir}")
-    print(f"MDP_DIR :  {mdp_dir}")
-    print(f"NREPLICAS: {args.nreplicas}")
-    print(f"GROMPP:    {GROMPP}")
-    print(f"MDRUN:     {MDRUN}")
-    print(f"LAUNCHER:  {LAUNCHER}")
-    print(f"MDARGS:    {MDARGS}")
-    print(f"REF_INDEX: {index}")
-    print(f"TRJ_BEGIN: {args.trj_begin_ps} ps")
+    print(f"WORKDIR:     {work_dir}")
+    print(f"TOP_DIR:     {top_dir}")
+    print(f"INIT_DIR:    {init_dir}")
+    print(f"MDP_DIR:     {mdp_dir}")
+    print(f"FF_DIR:      {ff_dir}")
+    print(f"NREPLICAS:   {args.nreplicas}")
+    print(f"GROMPP:      {GROMPP}")
+    print(f"MDRUN:       {MDRUN}")
+    print(f"LAUNCHER:    {LAUNCHER}")
+    print(f"MDARGS:      {MDARGS}")
+    print(f"REF_INDEX:   {index}")
+    print(f"TRJ_LENGTH:  {args.trj_total_ps} ps")
+    print(f"TRJ_EQUIL:   {args.trj_equil_ps} ps")
 
     # Prep
-    prepare_dirs(sim_dirs, init_dir, top_dir)
+    prepare_dirs(sim_dirs, init_dir, top_dir, ff_dir)
 
-    # Minimization
+    #Minimization
     grompp(sim_dirs, GROMPP, mdp_dir, stage="min", input_gro="start.gro", output_tpr="min.tpr", mdp_file="min.mdp", ref_gro="start.gro")
     mdrun_multidir(sim_dirs, LAUNCHER, MDRUN, args.nreplicas, MDARGS, "min")
 
-    # Equilibration
+    #Equilibration
     grompp(sim_dirs, GROMPP, mdp_dir, "eq0", "min.gro", "eq0.tpr", "eq0.mdp", "min.gro")
     mdrun_multidir(sim_dirs, LAUNCHER, MDRUN, args.nreplicas, MDARGS, "eq0")
 
@@ -267,8 +285,12 @@ def main() -> None:
     grompp(sim_dirs, GROMPP, mdp_dir, "eq3", "eq2.gro", "eq3.tpr", "eq3.mdp", "eq2.gro")
     mdrun_multidir(sim_dirs, LAUNCHER, MDRUN, args.nreplicas, MDARGS, "eq3")
 
-    # Production
+    #Production
     grompp(sim_dirs, GROMPP, mdp_dir, "md", "eq3.gro", "md.tpr", "md.mdp")
+    
+    # Assume standard martini timestep of 20 fs
+    nsteps = int(( (args.trj_equil_ps + args.trj_total_ps) / args.nreplicas) / 0.02)
+    MDARGS += f" -nsteps {nsteps}"
     mdrun_multidir(sim_dirs, LAUNCHER, MDRUN, args.nreplicas, MDARGS, "md")
 
     # Post-processing
@@ -279,7 +301,7 @@ def main() -> None:
         stage_xtc="md.xtc",
         out_xtc="cg_pbc.xtc",
         ndx=index,
-        begin_ps=args.trj_begin_ps,
+        begin_ps=args.trj_equil_ps,
     )
 
 

@@ -8,9 +8,9 @@
   <img src="assets/pogologo.svg" alt="OptiGoMartini Logo" width="300"/>
 </p>
 
-**P**erturbation-based **o**ptimization for **Gō**Martini (PoGō for short) is a toolkit for optimizing GōMartini protein models using perturbation theory and particle swarm optimization (PSO) to reproduce more accurate structural ensembles.  
+**P**erturbation-based **o**ptimization for **Gō**Martini (PoGō for short) is a toolkit for optimizing GōMartini protein models using perturbation theory and particle swarm optimization (PSO) to reproduce more accurate structural ensembles. 
 
-It implements the method described in:  
+It implements the method described in: 
 
 > **Kalutskii, M., Wilson, C. J., Grubmüller, H., & Igaev, M. (2025).**  
 > *Improving conformational ensembles of folded proteins in GōMartini.*  
@@ -40,11 +40,12 @@ Without manual tuning, **PoGō** iteratively refines an initial non-uniform Go�
 
 ## Usage
 ### Requirements
-- **Python 3.9+**
+- **Python 3.8**
 - **GROMACS 2021+**
 - Python dependencies:
   ```bash
-  pip install numpy pandas matplotlib MDAnalysis scipy numba
+  mamba install numpy scipy matplotlib MDAnalysis numba
+  pip install fst-pso
   ```
 
 ### Required inputs
