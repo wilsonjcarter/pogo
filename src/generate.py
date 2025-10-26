@@ -79,7 +79,21 @@ def prepare_dirs(sim_dirs: List[Path], init_dir: Path, top_dir: Path, ff_dir: Pa
                 shutil.copytree(top_src, top_dst)
             else:
                 print(f"[warn] missing reference directory: {top_src}")
-
+                
+                
+        # Will copy the most recent go_nbparams file from ff_param folder if present
+        itp_files = sorted(ff_dir.glob("go_nbparams_*.itp"), 
+                           key=lambda f: int(re.search(r'\d+', f.stem).group()),
+                           reverse=True)
+        if itp_files:
+            latest_itp = itp_files[0]
+            print(f"[info] Using most recent ITP: {latest_itp.name}")
+        else:
+            latest_itp = None
+            print(f"[warn] No go_nbparams_*.itp found in {ff_dir}")
+    
+        if latest_itp:
+            shutil.copy(latest_itp, top_dst / latest_itp.name)
 
         # Will copy the most recent go_nbparams file from ff_param folder if present
         itp_files = sorted(ff_dir.glob("go_nbparams_*.itp"),
