@@ -79,10 +79,10 @@ def prepare_dirs(sim_dirs: List[Path], init_dir: Path, top_dir: Path, ff_dir: Pa
                 shutil.copytree(top_src, top_dst)
             else:
                 print(f"[warn] missing reference directory: {top_src}")
-                
-                
+
+
         # Will copy the most recent go_nbparams file from ff_param folder if present
-        itp_files = sorted(ff_dir.glob("go_nbparams_*.itp"), 
+        itp_files = sorted(ff_dir.glob("go_nbparams_*.itp"),
                            key=lambda f: int(re.search(r'\d+', f.stem).group()),
                            reverse=True)
         if itp_files:
@@ -91,9 +91,9 @@ def prepare_dirs(sim_dirs: List[Path], init_dir: Path, top_dir: Path, ff_dir: Pa
         else:
             latest_itp = None
             print(f"[warn] No go_nbparams_*.itp found in {ff_dir}")
-    
+
         if latest_itp:
-            shutil.copy(latest_itp, top_dst / latest_itp.name)
+            shutil.copy(latest_itp, top_dst / "go_nbparams.itp")
 
 # -----------------------------
 # gromacs steps
@@ -115,7 +115,7 @@ def grompp(
             f"{grompp_cmd} -c {d / input_gro} -f {mdp_dir / mdp_file} "
             f"-p {d / 'topol.top'} -o {d / output_tpr} {ref_opt} -maxwarn 2"
         )
-        
+
         code = run_cmd(cmd)
         if code != 0:
             print(f"[error] grompp failed in {d} for stage {stage} (code {code})")
@@ -287,7 +287,7 @@ def main() -> None:
 
     #Production
     grompp(sim_dirs, GROMPP, mdp_dir, "md", "eq3.gro", "md.tpr", "md.mdp")
-    
+
     # Assume standard martini timestep of 20 fs
     nsteps = int(( (args.trj_equil_ps + args.trj_total_ps) / args.nreplicas) / 0.02)
     MDARGS += f" -nsteps {nsteps}"

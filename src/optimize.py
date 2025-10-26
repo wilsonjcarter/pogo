@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import sys
+import re
 import subprocess
 from pathlib import Path
 from typing import List, Tuple, Optional
@@ -441,7 +442,17 @@ def main() -> None:
     prob_diff_ref = np.log((probAA + 1e-12) / (probCG + 1e-12))
 
     # GO params + search space
-    go_params_template = (top_dir / "top" / "go_nbparams.itp")
+
+    itp_files = sorted(ff_dir.glob("go_nbparams_*.itp"),
+                       key=lambda f: int(re.search(r'\d+', f.stem).group()),
+                       reverse=True)
+    if itp_files:
+        go_params_template = itp_files[0]
+        print(f"[info] Using most recent ITP: {go_params_template}")
+    else:
+        go_params_template = (top_dir / "top" / "go_nbparams.itp")
+        print(f"[warn] No go_nbparams_*.itp found in {ff_dir}. Will try {go_params_template}.")
+
     if not go_params_template.exists():
         print(f"[error] cannot find template GO params: {go_params_template}")
         sys.exit(2)
@@ -462,9 +473,11 @@ def main() -> None:
     N = traj_cg.shape[0]               # CG samples
     MIN_RATIO = 7
 
-    if N < MIN_RATIO * D:
-        print(f"[abort] Not enough sampling: # of frames={N} < {MIN_RATIO}×(# of Gō-bonds)={MIN_RATIO*D}")
+    if N < MIN_RATIO * D * 0.5:
+        print(f"[abort] Not enough sampling: # of frames={N} < 0.5x{MIN_RATIO}×(# of Gō-bonds)={MIN_RATIO*D}")
         sys.exit(80)
+    elif N < MIN_RATIO * D:
+        print(f"[warn] Might not have enough sampling: # of frames={N} < {MIN_RATIO}×(# of Gō-bonds)={MIN_RATIO*D}")
 
     go_cg  = get_go_pot(go_bonds, traj_cg)
     go_aa  = get_go_pot(go_bonds, traj_aa)
@@ -519,7 +532,7 @@ def main() -> None:
         except:
             print(f"[warn] could not write gobonds to: {out_nb}")
 
-    out_ff = ff_dir / f"go_nbparams_{opt_step+1}.itp"
+    out_ff = ff_dir / f"go_nbparams_{opt_step}.itp"
     print(f"writing: {out_ff}")
     write_go_nbparams(out_ff, go_bonds)
 
