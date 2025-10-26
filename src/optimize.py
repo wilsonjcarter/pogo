@@ -124,8 +124,8 @@ def write_go_nbparams(path: Path, go_bonds: np.ndarray) -> None:
     with path.open("w") as f:
         f.write("[ nonbond_params ]\n")
         for i, j, sigma, eps in go_bonds:
-            if eps > 0.1:
-                f.write(f"molecule_0_{int(i)} molecule_0_{int(j)} 1 {sigma:.8f} {eps:.8f}\n")
+            #if eps > 0.1:
+            f.write(f"molecule_0_{int(i)} molecule_0_{int(j)} 1 {sigma:.8f} {eps:.8f}\n")
 
 
 # -----------------------------
